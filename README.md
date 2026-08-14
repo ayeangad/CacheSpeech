@@ -178,3 +178,9 @@ CacheSpeech builds on the cache-aware streaming approach introduced for Conforme
 - NVIDIA NeMo ASR Documentation
 
 This repository focuses on the empirical systems evaluation of that approach: quantifying redundant computation, runtime impact, and the trade-off between lookahead and streaming behavior.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
