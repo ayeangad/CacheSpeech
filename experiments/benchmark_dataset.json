@@ -1,0 +1,562 @@
+[
+  {
+    "audio": "clean-1.wav",
+    "lookahead": [
+      70,
+      13
+    ],
+    "reference": "Hello how are you how was your morning",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.18499095560109707,
+      "time_std": 0.0012078068336882903,
+      "rtf_mean": 0.027019044698782746,
+      "rtf_std": 0.00017640747203495003,
+      "chunks": 7,
+      "encoded_frames": 98,
+      "input_frames": 847,
+      "final_text": "hello how are you how was your morning"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.20772695399791702,
+      "time_std": 0.002240108952867469,
+      "rtf_mean": 0.030339774379642276,
+      "rtf_std": 0.0003271814220917002,
+      "chunks": 7,
+      "encoded_frames": 394,
+      "input_frames": 3100,
+      "final_text": "hello how are you how was your morning"
+    },
+    "speedup": 1.1229032972068453,
+    "input_frame_reduction": 0.7267741935483871,
+    "encoded_frame_reduction": 0.751269035532995
+  },
+  {
+    "audio": "clean-1.wav",
+    "lookahead": [
+      70,
+      6
+    ],
+    "reference": "Hello how are you how was your morning",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.33519725980004295,
+      "time_std": 0.0023673212054324865,
+      "rtf_mean": 0.04895758128292593,
+      "rtf_std": 0.0003457615387634498,
+      "chunks": 13,
+      "encoded_frames": 91,
+      "input_frames": 845,
+      "final_text": "hello how are you how was your morning"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.3700285208018613,
+      "time_std": 0.002327847026326549,
+      "rtf_mean": 0.05404489701068748,
+      "rtf_std": 0.0003399960968463292,
+      "chunks": 13,
+      "encoded_frames": 658,
+      "input_frames": 5170,
+      "final_text": "hello how are you how was your morning"
+    },
+    "speedup": 1.1039127259649928,
+    "input_frame_reduction": 0.8365570599613152,
+    "encoded_frame_reduction": 0.8617021276595744
+  },
+  {
+    "audio": "clean-1.wav",
+    "lookahead": [
+      70,
+      1
+    ],
+    "reference": "Hello how are you how was your morning",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 1.0965100092013018,
+      "time_std": 0.013327316822447824,
+      "rtf_mean": 0.1601518996158802,
+      "rtf_std": 0.0019465349955650507,
+      "chunks": 43,
+      "encoded_frames": 86,
+      "input_frames": 1075,
+      "final_text": "hello how are you how was your morning"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 1.2189374357985798,
+      "time_std": 0.011278840589492689,
+      "rtf_mean": 0.1780331635989783,
+      "rtf_std": 0.001647342687904576,
+      "chunks": 43,
+      "encoded_frames": 1978,
+      "input_frames": 15520,
+      "final_text": "hello how are you how was your morning"
+    },
+    "speedup": 1.111651900639242,
+    "input_frame_reduction": 0.9307345360824743,
+    "encoded_frame_reduction": 0.9565217391304348
+  },
+  {
+    "audio": "clean-1.wav",
+    "lookahead": [
+      70,
+      0
+    ],
+    "reference": "Hello how are you how was your morning",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 2.171716896801081,
+      "time_std": 0.04423846558838939,
+      "rtf_mean": 0.31719234984816835,
+      "rtf_std": 0.006461294690080336,
+      "chunks": 86,
+      "encoded_frames": 86,
+      "input_frames": 1462,
+      "final_text": "hello how are you how was your morning"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 2.466693633599789,
+      "time_std": 0.017424601490291777,
+      "rtf_mean": 0.36027548118703956,
+      "rtf_std": 0.0025449681309818433,
+      "chunks": 86,
+      "encoded_frames": 3913,
+      "input_frames": 30699,
+      "final_text": "hello how are you how was your morning"
+    },
+    "speedup": 1.135826514603817,
+    "input_frame_reduction": 0.9523762989022444,
+    "encoded_frame_reduction": 0.978021978021978
+  },
+  {
+    "audio": "clean-2.wav",
+    "lookahead": [
+      70,
+      13
+    ],
+    "reference": "Hello I'm doing good my evening was amazing",
+    "cache": {
+      "wer_mean": 0.375,
+      "wer_std": 0.0,
+      "time_mean": 0.18965192699979525,
+      "time_std": 0.007009215535525896,
+      "rtf_mean": 0.026701431957944825,
+      "rtf_std": 0.0009868399159509546,
+      "chunks": 7,
+      "encoded_frames": 98,
+      "input_frames": 847,
+      "final_text": "hello i am doing good my evening was am amazing"
+    },
+    "no_cache": {
+      "wer_mean": 0.25,
+      "wer_std": 0.0,
+      "time_mean": 0.21098656559770462,
+      "time_std": 0.00051313898453565,
+      "rtf_mean": 0.029705173654015416,
+      "rtf_std": 7.224574987082755e-05,
+      "chunks": 7,
+      "encoded_frames": 397,
+      "input_frames": 3126,
+      "final_text": "hello i am doing good my evening was amazing"
+    },
+    "speedup": 1.1124936558009897,
+    "input_frame_reduction": 0.7290467050543825,
+    "encoded_frame_reduction": 0.7531486146095718
+  },
+  {
+    "audio": "clean-2.wav",
+    "lookahead": [
+      70,
+      6
+    ],
+    "reference": "Hello I'm doing good my evening was amazing",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.33540625359892146,
+      "time_std": 0.0018670693148997676,
+      "rtf_mean": 0.04722244271607352,
+      "rtf_std": 0.0002628680080462174,
+      "chunks": 13,
+      "encoded_frames": 91,
+      "input_frames": 845,
+      "final_text": "hello i'm doing good my evening was amazing"
+    },
+    "no_cache": {
+      "wer_mean": 0.25,
+      "wer_std": 0.0,
+      "time_mean": 0.38401071979897095,
+      "time_std": 0.0017619734391089207,
+      "rtf_mean": 0.054065551919463016,
+      "rtf_std": 0.0002480713728583603,
+      "chunks": 13,
+      "encoded_frames": 661,
+      "input_frames": 5196,
+      "final_text": "hello i am doing good my evening was amazing"
+    },
+    "speedup": 1.1449122241416843,
+    "input_frame_reduction": 0.8373749037721324,
+    "encoded_frame_reduction": 0.8623298033282905
+  },
+  {
+    "audio": "clean-2.wav",
+    "lookahead": [
+      70,
+      1
+    ],
+    "reference": "Hello I'm doing good my evening was amazing",
+    "cache": {
+      "wer_mean": 0.25,
+      "wer_std": 0.0,
+      "time_mean": 1.1441797303996282,
+      "time_std": 0.004855983945607711,
+      "rtf_mean": 0.16109109832012575,
+      "rtf_std": 0.0006836826124770022,
+      "chunks": 45,
+      "encoded_frames": 90,
+      "input_frames": 1125,
+      "final_text": "hello i am doing good my evening was amazing"
+    },
+    "no_cache": {
+      "wer_mean": 0.25,
+      "wer_std": 0.0,
+      "time_mean": 1.323669880599482,
+      "time_std": 0.004759804409692055,
+      "rtf_mean": 0.18636183565720468,
+      "rtf_std": 0.0006701413246312915,
+      "chunks": 45,
+      "encoded_frames": 2159,
+      "input_frames": 16956,
+      "final_text": "hello i am doing good my evening was amazing"
+    },
+    "speedup": 1.1568723386990636,
+    "input_frame_reduction": 0.9336518046709129,
+    "encoded_frame_reduction": 0.9583140342751274
+  },
+  {
+    "audio": "clean-2.wav",
+    "lookahead": [
+      70,
+      0
+    ],
+    "reference": "Hello I'm doing good my evening was amazing",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 2.228959467801906,
+      "time_std": 0.052699489077248175,
+      "rtf_mean": 0.3138191660272123,
+      "rtf_std": 0.0074196547542389,
+      "chunks": 89,
+      "encoded_frames": 89,
+      "input_frames": 1513,
+      "final_text": "hello i'm doing good my evening was amazing"
+    },
+    "no_cache": {
+      "wer_mean": 0.25,
+      "wer_std": 0.0,
+      "time_mean": 2.7819027971985633,
+      "time_std": 0.08565330183327251,
+      "rtf_mean": 0.3916690403735999,
+      "rtf_std": 0.012059280636135617,
+      "chunks": 89,
+      "encoded_frames": 4183,
+      "input_frames": 32840,
+      "final_text": "hello i am doing good my evening was amazing"
+    },
+    "speedup": 1.2480724021159273,
+    "input_frame_reduction": 0.9539281364190012,
+    "encoded_frame_reduction": 0.9787234042553191
+  },
+  {
+    "audio": "noise 2.wav",
+    "lookahead": [
+      70,
+      13
+    ],
+    "reference": "Hello this is noisy example audio second",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.20016900339978747,
+      "time_std": 0.0031460451494735504,
+      "rtf_mean": 0.027847663244266484,
+      "rtf_std": 0.00043768018217495115,
+      "chunks": 7,
+      "encoded_frames": 98,
+      "input_frames": 847,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.2238429835997522,
+      "time_std": 0.002674951571822413,
+      "rtf_mean": 0.031141205286554285,
+      "rtf_std": 0.00037214128712053626,
+      "chunks": 7,
+      "encoded_frames": 398,
+      "input_frames": 3134,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "speedup": 1.1182699608724227,
+    "input_frame_reduction": 0.7297383535417996,
+    "encoded_frame_reduction": 0.7537688442211055
+  },
+  {
+    "audio": "noise 2.wav",
+    "lookahead": [
+      70,
+      6
+    ],
+    "reference": "Hello this is noisy example audio second",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.3642674389993772,
+      "time_std": 0.005214754087354293,
+      "rtf_mean": 0.050677161797353536,
+      "rtf_std": 0.0007254805352468407,
+      "chunks": 13,
+      "encoded_frames": 91,
+      "input_frames": 845,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 0.4138021207996644,
+      "time_std": 0.014239449247296377,
+      "rtf_mean": 0.05756846421809466,
+      "rtf_std": 0.0019810029559399513,
+      "chunks": 13,
+      "encoded_frames": 662,
+      "input_frames": 5204,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "speedup": 1.135984379873085,
+    "input_frame_reduction": 0.8376249039200615,
+    "encoded_frame_reduction": 0.8625377643504532
+  },
+  {
+    "audio": "noise 2.wav",
+    "lookahead": [
+      70,
+      1
+    ],
+    "reference": "Hello this is noisy example audio second",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 1.247333533600613,
+      "time_std": 0.019986896832494255,
+      "rtf_mean": 0.17352998519763677,
+      "rtf_std": 0.002780592213758244,
+      "chunks": 45,
+      "encoded_frames": 90,
+      "input_frames": 1125,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 1.3929865851969225,
+      "time_std": 0.003889473634426321,
+      "rtf_mean": 0.19379334796840883,
+      "rtf_std": 0.0005411065156408284,
+      "chunks": 45,
+      "encoded_frames": 2160,
+      "input_frames": 16964,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "speedup": 1.116771535177011,
+    "input_frame_reduction": 0.9336830936099977,
+    "encoded_frame_reduction": 0.9583333333333334
+  },
+  {
+    "audio": "noise 2.wav",
+    "lookahead": [
+      70,
+      0
+    ],
+    "reference": "Hello this is noisy example audio second",
+    "cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 2.724821602202428,
+      "time_std": 0.18735555119794767,
+      "rtf_mean": 0.3790792434894864,
+      "rtf_std": 0.02606504607650912,
+      "chunks": 90,
+      "encoded_frames": 90,
+      "input_frames": 1530,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "no_cache": {
+      "wer_mean": 0.0,
+      "wer_std": 0.0,
+      "time_mean": 2.9242202880021066,
+      "time_std": 0.18478363329009176,
+      "rtf_mean": 0.40681973956623635,
+      "rtf_std": 0.025707238910697244,
+      "chunks": 90,
+      "encoded_frames": 4275,
+      "input_frames": 33569,
+      "final_text": "hello this is noisy example audio second"
+    },
+    "speedup": 1.0731786204419798,
+    "input_frame_reduction": 0.9544222347999642,
+    "encoded_frame_reduction": 0.9789473684210527
+  },
+  {
+    "audio": "women-1.wav",
+    "lookahead": [
+      70,
+      13
+    ],
+    "reference": "Hi I miss you you're really cute and you're really hot and I miss you so much and you're so sweet I miss you okay that's longer than oh oh shit okay I'll stop",
+    "cache": {
+      "wer_mean": 0.3235294117647059,
+      "wer_std": 0.0,
+      "time_mean": 0.3835751905993675,
+      "time_std": 0.00449146682409135,
+      "rtf_mean": 0.03121876344615809,
+      "rtf_std": 0.0003655555514121558,
+      "chunks": 11,
+      "encoded_frames": 154,
+      "input_frames": 1331,
+      "final_text": "hi i'm asia he really cute and you really hurt and i miss you so much and you so sweet i miss you okay that's longer than oh o shadda o k i'll stop"
+    },
+    "no_cache": {
+      "wer_mean": 0.2647058823529412,
+      "wer_std": 0.0,
+      "time_mean": 0.4977314800009481,
+      "time_std": 0.0018203856008821501,
+      "rtf_mean": 0.04050981845195852,
+      "rtf_std": 0.00014815918455500263,
+      "chunks": 11,
+      "encoded_frames": 946,
+      "input_frames": 7488,
+      "final_text": "hi i'm assume he really cute and you really hurt and i miss you so much and you so sweet i miss you okay that's longer than oh shut the okay i'll stop"
+    },
+    "speedup": 1.297611243373697,
+    "input_frame_reduction": 0.8222489316239316,
+    "encoded_frame_reduction": 0.8372093023255813
+  },
+  {
+    "audio": "women-1.wav",
+    "lookahead": [
+      70,
+      6
+    ],
+    "reference": "Hi I miss you you're really cute and you're really hot and I miss you so much and you're so sweet I miss you okay that's longer than oh oh shit okay I'll stop",
+    "cache": {
+      "wer_mean": 0.3235294117647059,
+      "wer_std": 0.0,
+      "time_mean": 0.7563194640009897,
+      "time_std": 0.0039143226646999145,
+      "rtf_mean": 0.06155601043820719,
+      "rtf_std": 0.00031858242221102513,
+      "chunks": 22,
+      "encoded_frames": 154,
+      "input_frames": 1430,
+      "final_text": "hi i'm asia he really cute and he really hurt and i missy so much and you're so sweet i miss you okay that's longer than oh shut the o i'll stop"
+    },
+    "no_cache": {
+      "wer_mean": 0.3235294117647059,
+      "wer_std": 0.0,
+      "time_mean": 0.9337938580007176,
+      "time_std": 0.03521241802090181,
+      "rtf_mean": 0.07600045642901862,
+      "rtf_std": 0.0028659000256091613,
+      "chunks": 22,
+      "encoded_frames": 1815,
+      "input_frames": 14363,
+      "final_text": "hi i'm a sioux he really cute and you really hurt and i miss you so much and you so sweet i miss you okay that's longer than oh or shedda o k i'll stop"
+    },
+    "speedup": 1.2346553307789732,
+    "input_frame_reduction": 0.9004386270277798,
+    "encoded_frame_reduction": 0.9151515151515152
+  },
+  {
+    "audio": "women-1.wav",
+    "lookahead": [
+      70,
+      1
+    ],
+    "reference": "Hi I miss you you're really cute and you're really hot and I miss you so much and you're so sweet I miss you okay that's longer than oh oh shit okay I'll stop",
+    "cache": {
+      "wer_mean": 0.29411764705882354,
+      "wer_std": 0.0,
+      "time_mean": 2.1891827326020574,
+      "time_std": 0.013667710762682068,
+      "rtf_mean": 0.1781751780210946,
+      "rtf_std": 0.0011123999664418979,
+      "chunks": 77,
+      "encoded_frames": 154,
+      "input_frames": 1925,
+      "final_text": "hi i'm asia he really cute and he really hurt and i miss you so much and you so sweet i miss you okay that's longer than oh shutter o k i'll stop"
+    },
+    "no_cache": {
+      "wer_mean": 0.4117647058823529,
+      "wer_std": 0.0,
+      "time_mean": 3.4226015119988005,
+      "time_std": 0.01593615994846644,
+      "rtf_mean": 0.27856177769629126,
+      "rtf_std": 0.0012970265540216946,
+      "chunks": 77,
+      "encoded_frames": 6160,
+      "input_frames": 48738,
+      "final_text": "hi i'm a sioux he really cute and you really hurt and i miss you so much and you so sweet i miss you whether stronger than oh shut the o k i'll stop"
+    },
+    "speedup": 1.563415178197895,
+    "input_frame_reduction": 0.960503098198531,
+    "encoded_frame_reduction": 0.975
+  },
+  {
+    "audio": "women-1.wav",
+    "lookahead": [
+      70,
+      0
+    ],
+    "reference": "Hi I miss you you're really cute and you're really hot and I miss you so much and you're so sweet I miss you okay that's longer than oh oh shit okay I'll stop",
+    "cache": {
+      "wer_mean": 0.29411764705882354,
+      "wer_std": 0.0,
+      "time_mean": 4.860948731999088,
+      "time_std": 0.19727570212886442,
+      "rtf_mean": 0.3956272780600213,
+      "rtf_std": 0.01605605270980191,
+      "chunks": 154,
+      "encoded_frames": 154,
+      "input_frames": 2618,
+      "final_text": "hi i'm asia he really cute and he really hurt and i missed you so much and you so sweet i miss you okay that's longer than oh pushed up okay i'll stop"
+    },
+    "no_cache": {
+      "wer_mean": 0.35294117647058826,
+      "wer_std": 0.0,
+      "time_mean": 6.885030206602823,
+      "time_std": 0.09246901556662017,
+      "rtf_mean": 0.5603650460388794,
+      "rtf_std": 0.00752595160954655,
+      "chunks": 154,
+      "encoded_frames": 12243,
+      "input_frames": 96863,
+      "final_text": "hi i'm a sioux he really cute and you really hurt and i miss you so much and you so sweet i miss you whether that's longer than oh or shedder o k i'll stop"
+    },
+    "speedup": 1.4163963839567844,
+    "input_frame_reduction": 0.9729721359032861,
+    "encoded_frame_reduction": 0.9874213836477987
+  }
+]
