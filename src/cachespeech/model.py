@@ -51,3 +51,16 @@ class CacheSpeechModel:
     def subsampling_factor(self) -> int:
         return self.encoder.subsampling_factor
 
+    def set_lookahead(self, lookahead: list[int]) -> None:
+        """Set the encoder attention context used for streaming inference."""
+
+        if lookahead not in self.lookahead_options:
+            raise ValueError(
+                f"Unsupported lookahead {lookahead}. "
+                f"Supported options: {self.lookahead_options}"
+            )
+
+        self.encoder.set_default_att_context_size(lookahead)
+
+        print(f"Lookahead set to {lookahead}")
+

@@ -20,20 +20,64 @@ class StreamingState:
 
 
 class CacheSpeechStream:
-    """Cache-aware streaming encoder."""
+    """Cache-aware streaming encoder and RNNT decoder."""
 
-    def __init__(self, model):
+    def __init__(
+        self,
+        model,
+        lookahead: list[int] | None = None,
+    ):
         self.model = model
         self.state = StreamingState()
 
         self.encoder = model.encoder
-        self.encoder.setup_streaming_params()
+
+        if lookahead is not None:
+            if lookahead not in self.model.lookahead_options:
+                raise ValueError(
+                    f"Unsupported lookahead {lookahead}. "
+                    f"Supported options: {self.model.lookahead_options}"
+                )
+
+            self.encoder.set_default_att_context_size(
+                att_context_size=lookahead,
+            )
+        else:
+            self.encoder.setup_streaming_params()
 
         self.drop_extra_pre_encoded = (
             self.encoder.streaming_cfg.drop_extra_pre_encoded
         )
 
         self._initialize_cache()
+
+
+    def set_lookahead(
+        self,
+        lookahead: list[int],
+    ) -> None:
+        """
+        Switch the encoder to one of the supported attention lookaheads.
+
+        Changing lookahead changes the encoder's streaming geometry,
+        so the existing streaming cache must be discarded.
+        """
+
+        if lookahead not in self.model.lookahead_options:
+            raise ValueError(
+                f"Unsupported lookahead {lookahead}. "
+                f"Supported options: {self.model.lookahead_options}"
+            )
+
+        self.encoder.set_default_att_context_size(
+            att_context_size=lookahead,
+        )
+
+        self.drop_extra_pre_encoded = (
+            self.encoder.streaming_cfg.drop_extra_pre_encoded
+        )
+
+        self.reset()
 
     def _initialize_cache(self) -> None:
         """Create the initial encoder cache state."""
@@ -67,6 +111,9 @@ class CacheSpeechStream:
         """
         Process one feature chunk through the cache-aware encoder.
 
+        Args:
+            features: Mel features with shape [B, F, T].
+
         Returns:
             encoded: Encoder representations.
             encoded_length: Number of valid encoder frames.
@@ -74,7 +121,8 @@ class CacheSpeechStream:
 
         if features.dim() != 3:
             raise ValueError(
-                f"Expected features with shape [B, F, T], got {features.shape}"
+                f"Expected features with shape [B, F, T], "
+                f"got {features.shape}"
             )
 
         feature_length = torch.tensor(
@@ -107,3 +155,46 @@ class CacheSpeechStream:
         )
 
         return encoded, encoded_length
+
+    def step(
+        self,
+        features: torch.Tensor,
+        feature_length: int | None = None,
+    ) -> str:
+        """
+        Process one streaming feature chunk and decode its RNNT hypothesis.
+
+        Args:
+            features: Mel features with shape [B, F, T].
+            feature_length: Number of valid feature frames.
+
+        Returns:
+            Current best partial transcript.
+        """
+
+        if feature_length is None:
+            feature_length = features.shape[-1]
+
+        if feature_length <= 0:
+            return ""
+
+        encoded, encoded_length = self.encoder_step(
+            features,
+        )
+
+        decoder = self.model.model.decoding
+
+        with torch.inference_mode():
+            self.state.hypotheses = (
+                decoder.rnnt_decoder_predictions_tensor(
+                    encoded,
+                    encoded_length,
+                    return_hypotheses=True,
+                    partial_hypotheses=self.state.hypotheses,
+                )
+            )
+
+        if not self.state.hypotheses:
+            return ""
+
+        return self.state.hypotheses[0].text

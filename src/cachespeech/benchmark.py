@@ -10,7 +10,7 @@ from .model import CacheSpeechModel
 from .streaming import CacheSpeechStream
 
 REFERENCE_TEXT = (
-    "Hello My name is Angad Sankhla, I'm a software developer"
+    "Hi How are you how was your morning"
 )
 
 def load_features(
@@ -56,6 +56,15 @@ def benchmark(
         model,
         audio_path,
     )
+    
+    cfg = model.model.encoder.cfg
+    if isinstance(cfg.pre_encode_cache_size, list):
+        pre_encode = cfg.pre_encode_cache_size[1]
+    else:
+        pre_encode = cfg.pre_encode_cache_size
+
+    input_chunk_size = chunk_size + pre_encode
+    features = F.pad(features, (pre_encode, 0))
 
     if model.device == "cuda":
         torch.cuda.empty_cache()
@@ -67,18 +76,28 @@ def benchmark(
 
     num_chunks = 0
     final_text = ""
+    start = 0
 
-    for start in range(0, valid_frames, chunk_size):
-        end = min(start + chunk_size, valid_frames)
+    while start < features.shape[-1] - pre_encode:
+        end = min(start + input_chunk_size, features.shape[-1])
 
         chunk = features[:, :, start:end]
 
+        actual_length = chunk.shape[-1]
+        if actual_length == 0:
+            break
+            
+        if actual_length < input_chunk_size:
+            pad_amount = input_chunk_size - actual_length
+            chunk = F.pad(chunk, (0, pad_amount))
+
         final_text = stream.step(
             chunk,
-            feature_length=end - start,
+            feature_length=chunk.shape[-1],
         )
 
         num_chunks += 1
+        start += chunk_size
 
     if model.device == "cuda":
         torch.cuda.synchronize()
