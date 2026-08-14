@@ -1,23 +1,22 @@
-
+import statistics
 import time
 
 import torch
 from jiwer import (
-    wer,
     Compose,
-    ToLowerCase,
-    RemovePunctuation,
     RemoveMultipleSpaces,
+    RemovePunctuation,
     Strip,
+    ToLowerCase,
+    wer,
 )
 
-from cachespeech.audio import load_audio, extract_features
+from cachespeech.audio import extract_features, load_audio
 from cachespeech.model import CacheSpeechModel
 
 
 AUDIO_PATH = "audio/audio-example-1.wav"
 
-# Use the exact words spoken in the audio.
 REFERENCE_TEXT = "Hello how are you how was your morning"
 
 LOOKAHEADS = [
@@ -26,6 +25,8 @@ LOOKAHEADS = [
     [70, 1],
     [70, 0],
 ]
+
+NUM_RUNS = 5
 
 
 WER_TRANSFORM = Compose([
@@ -37,6 +38,10 @@ WER_TRANSFORM = Compose([
 
 
 def run_stream(model, features):
+    """
+    Run one complete cache-aware streaming inference pass.
+    """
+
     encoder = model.encoder
     decoder = model.model.decoding
     cfg = encoder.streaming_cfg
@@ -71,29 +76,24 @@ def run_stream(model, features):
     else:
         input_shift = cfg.shift_size
 
-    # FastConformer requires historical feature frames
-    # for the convolutional pre-encoder.
+    # FastConformer requires pre-encoder history
+    # on every streaming chunk.
     pre_encode_cache = cfg.pre_encode_cache_size
 
     if isinstance(pre_encode_cache, list):
         pre_encode_cache = pre_encode_cache[-1]
 
-    # The actual input window consists of:
-    #
-    #   previous pre-encoder context
-    #   +
-    #   current streaming chunk
-    #
+    # Actual input window = streaming chunk + pre-encoder history.
     window_size = input_chunk_size + pre_encode_cache
 
-    # Add initial left-side context.
+    # Add the initial historical context.
     padded_features = torch.nn.functional.pad(
         features,
         (pre_encode_cache, 0),
     )
 
     # ------------------------------------------------------------
-    # Streaming inference
+    # Streaming loop
     # ------------------------------------------------------------
 
     start = 0
@@ -112,8 +112,7 @@ def run_stream(model, features):
         if actual_length == 0:
             break
 
-        # Final chunk may be smaller than the required
-        # convolutional input window.
+        # Pad the final chunk if necessary.
         if actual_length < window_size:
             chunk = torch.nn.functional.pad(
                 chunk,
@@ -126,7 +125,7 @@ def run_stream(model, features):
             dtype=torch.long,
         )
 
-        # Synchronize before timing CUDA work.
+        # Synchronize so GPU timing is accurate.
         if model.device.startswith("cuda"):
             torch.cuda.synchronize()
 
@@ -159,7 +158,6 @@ def run_stream(model, features):
                 )
             )
 
-        # Synchronize after CUDA work so timing includes GPU execution.
         if model.device.startswith("cuda"):
             torch.cuda.synchronize()
 
@@ -184,10 +182,33 @@ def run_stream(model, features):
     }
 
 
+def warm_up(model, features, lookahead):
+    """
+    Perform one unmeasured inference pass to warm up the GPU/model.
+
+    This is intentionally separate from run_single_evaluation()
+    so the warm-up cannot recursively call itself.
+    """
+
+    model.set_lookahead(lookahead)
+
+    # Clear stale CUDA synchronization state before warm-up.
+    if model.device.startswith("cuda"):
+        torch.cuda.synchronize()
+
+    run_stream(
+        model,
+        features,
+    )
+
+    if model.device.startswith("cuda"):
+        torch.cuda.synchronize()
+
+
 def stability_score(transcripts):
     """
-    Fraction of consecutive transcript updates that
-    remained unchanged.
+    Fraction of consecutive transcript updates
+    that remained unchanged.
 
     Higher = more stable transcript.
     """
@@ -203,18 +224,110 @@ def stability_score(transcripts):
     return unchanged / (len(transcripts) - 1)
 
 
+def run_single_evaluation(
+    model,
+    features,
+    waveform,
+    sample_rate,
+    lookahead,
+):
+    """
+    Run one measured streaming evaluation.
+    """
+
+    model.set_lookahead(lookahead)
+
+    # ------------------------------------------------------------
+    # Measured inference
+    # ------------------------------------------------------------
+
+    result = run_stream(
+        model,
+        features,
+    )
+
+    final_text = result["final_text"]
+
+    # ------------------------------------------------------------
+    # WER
+    # ------------------------------------------------------------
+
+    normalized_reference = WER_TRANSFORM(
+        REFERENCE_TEXT,
+    )
+
+    normalized_hypothesis = WER_TRANSFORM(
+        final_text,
+    )
+
+    error_rate = wer(
+        normalized_reference,
+        normalized_hypothesis,
+    )
+
+    # ------------------------------------------------------------
+    # Stability
+    # ------------------------------------------------------------
+
+    stability = stability_score(
+        result["transcripts"],
+    )
+
+    # ------------------------------------------------------------
+    # RTF
+    # ------------------------------------------------------------
+
+    audio_duration = (
+        waveform.shape[-1] / sample_rate
+    )
+
+    rtf = (
+        result["inference_time"]
+        / audio_duration
+    )
+
+    return {
+        "wer": error_rate,
+        "rtf": rtf,
+        "inference_time": result["inference_time"],
+        "chunks": result["num_chunks"],
+        "encoded_frames": result["encoded_frames"],
+        "stability": stability,
+        "final_text": final_text,
+    }
+
+
+def mean(values):
+    return statistics.mean(values)
+
+
+def std(values):
+    """
+    Sample standard deviation.
+
+    With 5 runs this gives us an estimate of
+    run-to-run variability.
+    """
+
+    if len(values) <= 1:
+        return 0.0
+
+    return statistics.stdev(values)
+
+
 def main():
 
-    # ------------------------------------------------------------
-    # Load model
-    # ------------------------------------------------------------
+    # ============================================================
+    # Load model once
+    # ============================================================
 
     print("Loading model...")
+
     model = CacheSpeechModel()
 
-    # ------------------------------------------------------------
-    # Load audio
-    # ------------------------------------------------------------
+    # ============================================================
+    # Load audio once
+    # ============================================================
 
     print()
     print("Loading audio...")
@@ -229,170 +342,251 @@ def main():
         sample_rate,
     )
 
-    print("Features:", features.shape)
+    audio_duration = (
+        waveform.shape[-1] / sample_rate
+    )
 
-    # ------------------------------------------------------------
+    print(
+        "Features:",
+        features.shape,
+    )
+
+    print(
+        "Audio duration:",
+        round(audio_duration, 3),
+        "s",
+    )
+
+    # ============================================================
     # Evaluation
-    # ------------------------------------------------------------
+    # ============================================================
 
     print()
-    print("=" * 80)
-    print("FIXED LOOKAHEAD EVALUATION")
-    print("=" * 80)
+    print("=" * 90)
+    print("MULTI-RUN FIXED LOOKAHEAD EVALUATION")
+    print("=" * 90)
 
-    results = []
+    print()
+    print(
+        f"Runs per lookahead: {NUM_RUNS}"
+    )
+
+    all_results = []
 
     for lookahead in LOOKAHEADS:
 
         print()
-        print("-" * 80)
+        print("-" * 90)
         print(f"LOOKAHEAD: {lookahead}")
-        print("-" * 80)
+        print("-" * 90)
 
-        # Change FastConformer attention context.
-        model.set_lookahead(
+        # --------------------------------------------------------
+        # Warm-up ONCE per lookahead
+        # --------------------------------------------------------
+
+        print(
+            "Warm-up...",
+            end=" ",
+            flush=True,
+        )
+
+        warm_up(
+            model,
+            features,
             lookahead,
         )
 
-        result = run_stream(
-            model,
-            features,
-        )
-
-        final_text = result["final_text"]
+        print("done")
 
         # --------------------------------------------------------
-        # WER
+        # Measured runs
         # --------------------------------------------------------
 
-        normalized_reference = WER_TRANSFORM(
-            REFERENCE_TEXT,
-        )
+        run_results = []
 
-        normalized_hypothesis = WER_TRANSFORM(
-            final_text,
-        )
+        for run_number in range(
+            1,
+            NUM_RUNS + 1,
+        ):
 
-        error_rate = wer(
-            normalized_reference,
-            normalized_hypothesis,
-        )
+            print(
+                f"Run {run_number}/{NUM_RUNS}...",
+                end=" ",
+                flush=True,
+            )
+
+            result = run_single_evaluation(
+                model=model,
+                features=features,
+                waveform=waveform,
+                sample_rate=sample_rate,
+                lookahead=lookahead,
+            )
+
+            run_results.append(result)
+
+            print(
+                f"RTF={result['rtf']:.4f} "
+                f"time={result['inference_time']:.4f}s "
+                f"WER={result['wer']:.4f}"
+            )
 
         # --------------------------------------------------------
-        # Stability
+        # Aggregate results
         # --------------------------------------------------------
 
-        stability = stability_score(
-            result["transcripts"],
-        )
+        wers = [
+            result["wer"]
+            for result in run_results
+        ]
 
-        # --------------------------------------------------------
-        # Real-time factor
-        # --------------------------------------------------------
+        rtfs = [
+            result["rtf"]
+            for result in run_results
+        ]
 
-        audio_duration = (
-            waveform.shape[-1] / sample_rate
-        )
-
-        rtf = (
+        inference_times = [
             result["inference_time"]
-            / audio_duration
+            for result in run_results
+        ]
+
+        stabilities = [
+            result["stability"]
+            for result in run_results
+        ]
+
+        chunks = [
+            result["chunks"]
+            for result in run_results
+        ]
+
+        encoded_frames = [
+            result["encoded_frames"]
+            for result in run_results
+        ]
+
+        aggregated = {
+            "lookahead": lookahead,
+
+            "wer_mean": mean(wers),
+            "wer_std": std(wers),
+
+            "rtf_mean": mean(rtfs),
+            "rtf_std": std(rtfs),
+
+            "time_mean": mean(inference_times),
+            "time_std": std(inference_times),
+
+            "stability_mean": mean(stabilities),
+            "stability_std": std(stabilities),
+
+            "chunks": chunks[0],
+            "encoded_frames": encoded_frames[0],
+
+            "final_text": run_results[-1]["final_text"],
+        }
+
+        all_results.append(
+            aggregated
         )
 
         # --------------------------------------------------------
-        # Store result
-        # --------------------------------------------------------
-
-        results.append(
-            {
-                "lookahead": lookahead,
-                "wer": error_rate,
-                "rtf": rtf,
-                "inference_time": result["inference_time"],
-                "chunks": result["num_chunks"],
-                "encoded_frames": result["encoded_frames"],
-                "stability": stability,
-                "final_text": final_text,
-            }
-        )
-
-        # --------------------------------------------------------
-        # Print result
+        # Print aggregate
         # --------------------------------------------------------
 
         print()
-        print("Reference:", repr(REFERENCE_TEXT))
-        print("Final:", repr(final_text))
-
-        print()
-        print("Normalized reference:")
-        print(repr(normalized_reference))
-
-        print("Normalized hypothesis:")
-        print(repr(normalized_hypothesis))
-
-        print()
-        print("WER:", round(error_rate, 4))
-        print("RTF:", round(rtf, 4))
+        print("Aggregate:")
 
         print(
-            "Inference:",
-            round(
-                result["inference_time"],
-                4,
-            ),
-            "s",
+            f"  WER:        "
+            f"{aggregated['wer_mean']:.4f} "
+            f"± {aggregated['wer_std']:.4f}"
         )
 
         print(
-            "Chunks:",
-            result["num_chunks"],
+            f"  RTF:        "
+            f"{aggregated['rtf_mean']:.4f} "
+            f"± {aggregated['rtf_std']:.4f}"
         )
 
         print(
-            "Encoded frames:",
-            result["encoded_frames"],
+            f"  Time:       "
+            f"{aggregated['time_mean']:.4f}s "
+            f"± {aggregated['time_std']:.4f}s"
         )
 
         print(
-            "Stability:",
-            round(
-                stability,
-                4,
-            ),
+            f"  Stability:  "
+            f"{aggregated['stability_mean']:.4f} "
+            f"± {aggregated['stability_std']:.4f}"
         )
 
-    # ------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------
+        print(
+            f"  Chunks:     "
+            f"{aggregated['chunks']}"
+        )
+
+        print(
+            f"  Encoded:    "
+            f"{aggregated['encoded_frames']}"
+        )
+
+        print(
+            f"  Final:      "
+            f"{aggregated['final_text']!r}"
+        )
+
+    # ============================================================
+    # Final summary
+    # ============================================================
 
     print()
-    print("=" * 80)
-    print("SUMMARY")
-    print("=" * 80)
+    print("=" * 90)
+    print("MULTI-RUN SUMMARY")
+    print("=" * 90)
 
     print()
 
     print(
         f"{'Lookahead':<15}"
-        f"{'WER':<10}"
-        f"{'RTF':<10}"
-        f"{'Time':<12}"
+        f"{'WER':<18}"
+        f"{'RTF':<18}"
+        f"{'Time (s)':<22}"
+        f"{'Stability':<20}"
         f"{'Chunks':<10}"
-        f"{'Stability':<12}"
     )
 
-    print("-" * 80)
+    print("-" * 105)
 
-    for result in results:
+    for result in all_results:
+
+        wer_text = (
+            f"{result['wer_mean']:.4f}"
+            f" ± {result['wer_std']:.4f}"
+        )
+
+        rtf_text = (
+            f"{result['rtf_mean']:.4f}"
+            f" ± {result['rtf_std']:.4f}"
+        )
+
+        time_text = (
+            f"{result['time_mean']:.4f}"
+            f" ± {result['time_std']:.4f}"
+        )
+
+        stability_text = (
+            f"{result['stability_mean']:.4f}"
+            f" ± {result['stability_std']:.4f}"
+        )
 
         print(
             f"{str(result['lookahead']):<15}"
-            f"{result['wer']:<10.4f}"
-            f"{result['rtf']:<10.4f}"
-            f"{result['inference_time']:<12.4f}"
+            f"{wer_text:<18}"
+            f"{rtf_text:<18}"
+            f"{time_text:<22}"
+            f"{stability_text:<20}"
             f"{result['chunks']:<10}"
-            f"{result['stability']:<12.4f}"
         )
 
 
