@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import time
@@ -60,8 +59,8 @@ def prepare_features(
     pre_encode_cache: int,
 ) -> torch.Tensor:
     """
-    Add the left-side pre-encoder history required by
-    FastConformer cache-aware streaming.
+    FastConformer streaming requires pre-encoder history
+    at the beginning of each streaming window.
     """
 
     return torch.nn.functional.pad(
@@ -77,8 +76,8 @@ def run_cached(
     """
     CacheSpeech.
 
-    Each streaming chunk is processed incrementally.
-    Encoder state is carried from one step to the next.
+    Process each streaming chunk once and carry the
+    encoder state between chunks.
     """
 
     encoder = model.encoder
@@ -191,22 +190,22 @@ def run_no_cache(
     """
     Naive no-cache baseline.
 
-    At every streaming update, recompute the entire audio
-    prefix observed so far.
+    At every streaming update, recompute the entire
+    observed prefix using the ordinary FastConformer
+    encoder with NO encoder cache.
 
     Example:
 
         step 1: encode [0 : t1]
         step 2: encode [0 : t2]
         step 3: encode [0 : t3]
-        ...
 
-    No encoder state is reused between steps.
+    Nothing from the previous encoder invocation
+    is reused.
     """
 
     encoder = model.encoder
     decoder = model.model.decoding
-    cfg = encoder.streaming_cfg
 
     (
         chunk_size,
@@ -236,7 +235,7 @@ def run_no_cache(
             features.shape[-1],
         )
 
-        # Recompute EVERYTHING observed so far.
+        # Recompute the entire observed prefix.
         accumulated = features[:, :, :end]
 
         actual_length = accumulated.shape[-1]
@@ -253,33 +252,20 @@ def run_no_cache(
             dtype=torch.long,
         )
 
-        # Fresh cache/state for every invocation.
-        (
-            cache_last_channel,
-            cache_last_time,
-            cache_last_channel_len,
-        ) = encoder.get_initial_cache_state(
-            batch_size=1,
-            dtype=torch.float32,
-            device=model.device,
-        )
-
         with torch.inference_mode():
 
-            (
-                encoded,
-                encoded_len,
-                _,
-                _,
-                _,
-            ) = encoder.cache_aware_stream_step(
-                processed_signal=accumulated,
-                processed_signal_length=accumulated_length,
-                cache_last_channel=cache_last_channel,
-                cache_last_time=cache_last_time,
-                cache_last_channel_len=cache_last_channel_len,
-                keep_all_outputs=False,
-                drop_extra_pre_encoded=cfg.drop_extra_pre_encoded,
+            # IMPORTANT:
+            #
+            # This is the ordinary encoder forward path.
+            #
+            # No cache_last_channel
+            # No cache_last_time
+            # No cache_last_channel_len
+            #
+            # Therefore the entire prefix is recomputed.
+            encoded, encoded_len = encoder(
+                audio_signal=accumulated,
+                length=accumulated_length,
             )
 
             hypotheses = (
@@ -313,7 +299,7 @@ def benchmark_method(
     features,
     audio_duration,
 ):
-    """Benchmark one method."""
+    """Run one method and measure wall-clock inference time."""
 
     if model.device.startswith("cuda"):
         torch.cuda.synchronize()
@@ -331,6 +317,7 @@ def benchmark_method(
     elapsed = time.perf_counter() - start_time
 
     result["inference_time"] = elapsed
+
     result["rtf"] = elapsed / audio_duration
 
     result["wer"] = wer(
@@ -346,9 +333,9 @@ def print_result(
     result,
 ):
     print()
-    print("-" * 65)
+    print("-" * 70)
     print(name)
-    print("-" * 65)
+    print("-" * 70)
 
     print(
         "Final:",
@@ -424,9 +411,9 @@ def main():
     )
 
     print()
-    print("=" * 65)
+    print("=" * 70)
     print("CACHE VS NO-CACHE")
-    print("=" * 65)
+    print("=" * 70)
 
     print()
     print("Lookahead:", LOOKAHEAD)
@@ -438,14 +425,14 @@ def main():
     print()
     print("Warming up...")
 
-    _ = benchmark_method(
+    benchmark_method(
         run_cached,
         model,
         features,
         audio_duration,
     )
 
-    _ = benchmark_method(
+    benchmark_method(
         run_no_cache,
         model,
         features,
@@ -491,46 +478,46 @@ def main():
     # ---------------------------------------------------------
 
     print()
-    print("=" * 65)
+    print("=" * 70)
     print("RESULT")
-    print("=" * 65)
+    print("=" * 70)
 
     print()
 
     print(
-        f"{'Metric':<30}"
+        f"{'Metric':<32}"
         f"{'CacheSpeech':<18}"
         f"{'No-cache':<18}"
     )
 
-    print("-" * 65)
+    print("-" * 70)
 
     print(
-        f"{'WER':<30}"
+        f"{'WER':<32}"
         f"{cached['wer']:<18.4f}"
         f"{no_cache['wer']:<18.4f}"
     )
 
     print(
-        f"{'Inference time (s)':<30}"
+        f"{'Inference time (s)':<32}"
         f"{cached['inference_time']:<18.4f}"
         f"{no_cache['inference_time']:<18.4f}"
     )
 
     print(
-        f"{'RTF':<30}"
+        f"{'RTF':<32}"
         f"{cached['rtf']:<18.4f}"
         f"{no_cache['rtf']:<18.4f}"
     )
 
     print(
-        f"{'Encoded frames':<30}"
+        f"{'Encoded frames':<32}"
         f"{cached['encoded_frames']:<18}"
         f"{no_cache['encoded_frames']:<18}"
     )
 
     print(
-        f"{'Input frames processed':<30}"
+        f"{'Input frames processed':<32}"
         f"{cached['input_frames_processed']:<18}"
         f"{no_cache['input_frames_processed']:<18}"
     )
@@ -549,7 +536,7 @@ def main():
     else:
         speedup = float("inf")
 
-    if cached["input_frames_processed"] > 0:
+    if no_cache["input_frames_processed"] > 0:
 
         input_reduction = (
             1
