@@ -8,3 +8,6 @@ results/
 *.egg-info/
 
 .DS_Store
+
+# Local benchmark audio
+audio/*.wav
