@@ -9,9 +9,7 @@ import torchaudio
 from .model import CacheSpeechModel
 from .streaming import CacheSpeechStream
 
-REFERENCE_TEXT = (
-    "Hi How are you how was your morning"
-)
+REFERENCE_TEXT = "hello how are you how was your morning" 
 
 def load_features(
     model: CacheSpeechModel,
