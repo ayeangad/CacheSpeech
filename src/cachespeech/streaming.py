@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import torch
+
 from nemo.collections.asr.inference.utils.context_manager import CacheAwareContext
 from nemo.collections.asr.parts.utils.rnnt_utils import Hypothesis
 
@@ -19,71 +20,90 @@ class StreamingState:
 
 
 class CacheSpeechStream:
-    """
-    Stateful cache-aware streaming ASR engine.
-
-    Each call to `step()` processes one acoustic feature chunk and
-    carries the encoder cache + RNNT hypothesis into the next step.
-    """
+    """Cache-aware streaming encoder."""
 
     def __init__(self, model):
         self.model = model
         self.state = StreamingState()
 
-    def step(
+        self.encoder = model.encoder
+        self.encoder.setup_streaming_params()
+
+        self.drop_extra_pre_encoded = (
+            self.encoder.streaming_cfg.drop_extra_pre_encoded
+        )
+
+        self._initialize_cache()
+
+    def _initialize_cache(self) -> None:
+        """Create the initial encoder cache state."""
+
+        (
+            cache_last_channel,
+            cache_last_time,
+            cache_last_channel_len,
+        ) = self.encoder.get_initial_cache_state(
+            batch_size=1,
+            dtype=torch.float32,
+            device=self.model.device,
+        )
+
+        self.state.context = CacheAwareContext(
+            cache_last_channel=cache_last_channel,
+            cache_last_time=cache_last_time,
+            cache_last_channel_len=cache_last_channel_len,
+        )
+
+    def reset(self) -> None:
+        """Reset the stream and create a fresh encoder cache."""
+
+        self.state.reset()
+        self._initialize_cache()
+
+    def encoder_step(
         self,
         features: torch.Tensor,
-        feature_length: int | None = None,
-    ) -> str:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Process one chunk of acoustic features.
-
-        Args:
-            features:
-                Tensor shaped [B, 80, T].
-
-            feature_length:
-                Number of valid frames in the chunk.
+        Process one feature chunk through the cache-aware encoder.
 
         Returns:
-            Current transcription hypothesis.
+            encoded: Encoder representations.
+            encoded_length: Number of valid encoder frames.
         """
 
-        if features.ndim != 3:
+        if features.dim() != 3:
             raise ValueError(
-                f"Expected features with shape [B, 80, T], "
-                f"got {tuple(features.shape)}"
+                f"Expected features with shape [B, F, T], got {features.shape}"
             )
 
-        if features.shape[1] != 80:
-            raise ValueError(
-                f"Expected 80 mel features, got {features.shape[1]}"
-            )
-
-        if feature_length is None:
-            feature_length = features.shape[-1]
-
-        length = torch.tensor(
-            [feature_length],
+        feature_length = torch.tensor(
+            [features.shape[-1]],
             device=features.device,
             dtype=torch.long,
         )
 
-        hypotheses, context = self.model.streaming.stream_step(
-            processed_signal=features,
-            processed_signal_length=length,
-            context=self.state.context,
-            previous_hypotheses=self.state.hypotheses,
+        with torch.inference_mode():
+            (
+                encoded,
+                encoded_length,
+                cache_last_channel,
+                cache_last_time,
+                cache_last_channel_len,
+            ) = self.encoder.cache_aware_stream_step(
+                processed_signal=features,
+                processed_signal_length=feature_length,
+                cache_last_channel=self.state.context.cache_last_channel,
+                cache_last_time=self.state.context.cache_last_time,
+                cache_last_channel_len=self.state.context.cache_last_channel_len,
+                keep_all_outputs=False,
+                drop_extra_pre_encoded=self.drop_extra_pre_encoded,
+            )
+
+        self.state.context = CacheAwareContext(
+            cache_last_channel=cache_last_channel,
+            cache_last_time=cache_last_time,
+            cache_last_channel_len=cache_last_channel_len,
         )
 
-        self.state.context = context
-        self.state.hypotheses = hypotheses
-
-        if not hypotheses:
-            return ""
-
-        return hypotheses[0].text
-
-    def reset(self) -> None:
-        """Start a new utterance."""
-        self.state.reset()
+        return encoded, encoded_length
