@@ -5,6 +5,7 @@ import time
 import soundfile as sf
 import torch
 import torchaudio
+import torch.nn.functional as F
 
 from .model import CacheSpeechModel
 from .streaming import CacheSpeechStream
@@ -42,7 +43,7 @@ def load_features(
 
 
 def benchmark(
-    audio_path: str = "audio/audio-example-1.wav",
+    audio_path: str = "audio/clean-1.wav",
     chunk_size: int = 105,
 ) -> dict:
     """Benchmark cache-aware streaming inference."""

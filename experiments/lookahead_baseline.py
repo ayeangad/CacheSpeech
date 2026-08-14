@@ -1,13 +1,12 @@
 import time
-
 import torch
 
 from cachespeech.audio import load_audio, extract_features
 from cachespeech.model import CacheSpeechModel
-from cachespeech.streaming import CacheSpeechStream
+from cachespeech.evaluation import run_cache_aware, get_streaming_sizes
 
 
-AUDIO_PATH = "audio/audio-example-1.wav"
+AUDIO_PATH = "audio/clean-1.wav"
 
 LOOKAHEADS = [
     [70, 13],
@@ -24,96 +23,25 @@ def run_stream(
 ) -> dict:
     """Run cache-aware streaming inference for one lookahead."""
 
-    stream = CacheSpeechStream(
-        model,
-        lookahead=lookahead,
-    )
+    model.set_lookahead(lookahead)
 
-    cfg = model.encoder.streaming_cfg
-
-    if isinstance(cfg.chunk_size, list):
-        chunk_size = cfg.chunk_size[1]
-    else:
-        chunk_size = cfg.chunk_size
-
-    if isinstance(cfg.shift_size, list):
-        shift_size = cfg.shift_size[1]
-    else:
-        shift_size = cfg.shift_size
-
-    if isinstance(cfg.pre_encode_cache_size, list):
-        pre_encode = cfg.pre_encode_cache_size[1]
-    else:
-        pre_encode = cfg.pre_encode_cache_size
-
-    input_chunk_size = chunk_size + pre_encode
+    chunk_size, shift_size, pre_encode_cache = get_streaming_sizes(model.encoder)
 
     print()
     print("Streaming configuration:")
     print("  lookahead:", lookahead)
-    print("  chunk size:", cfg.chunk_size)
-    print("  shift size:", cfg.shift_size)
-    print("  valid output length:", cfg.valid_out_len)
+    print("  chunk size:", chunk_size)
+    print("  shift size:", shift_size)
     print()
 
-    transcripts = []
+    # The centralized function returns everything we need
+    result = run_cache_aware(model, features)
 
-    import torch.nn.functional as F
-    features = F.pad(features, (pre_encode, 0))
+    result["lookahead"] = lookahead
+    result["chunk_size"] = chunk_size
+    result["shift_size"] = shift_size
 
-    start = 0
-
-    if model.device == "cuda":
-        torch.cuda.synchronize()
-
-    inference_start = time.perf_counter()
-
-    while start < features.shape[-1] - pre_encode:
-
-        end = min(
-            start + input_chunk_size,
-            features.shape[-1],
-        )
-
-        chunk = features[:, :, start:end]
-
-        if chunk.shape[-1] == 0:
-            break
-
-        actual_length = chunk.shape[-1]
-        if actual_length < input_chunk_size:
-            pad_amount = input_chunk_size - actual_length
-            chunk = F.pad(chunk, (0, pad_amount))
-
-        text = stream.step(
-            chunk,
-            feature_length=chunk.shape[-1],
-        )
-
-        transcripts.append(text)
-
-        print(
-            f"chunk {len(transcripts) - 1:02d} "
-            f"| input={chunk.shape[-1]:3d} "
-            f"| text={text!r}"
-        )
-
-        start += shift_size
-
-    if model.device == "cuda":
-        torch.cuda.synchronize()
-
-    inference_time = time.perf_counter() - inference_start
-
-    return {
-        "lookahead": lookahead,
-        "final_text": transcripts[-1] if transcripts else "",
-        "transcripts": transcripts,
-        "inference_time": inference_time,
-        "num_chunks": len(transcripts),
-        "chunk_size": chunk_size,
-        "shift_size": shift_size,
-    }
+    return result
 
 
 def main():

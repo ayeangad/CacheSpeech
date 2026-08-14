@@ -1,19 +1,10 @@
-from __future__ import annotations
-
 import time
-
 import torch
-from jiwer import (
-    wer,
-    Compose,
-    ToLowerCase,
-    RemovePunctuation,
-    RemoveMultipleSpaces,
-    Strip,
-)
 
 from cachespeech.audio import load_audio, extract_features
 from cachespeech.model import CacheSpeechModel
+from cachespeech.evaluation import run_cache_aware, run_no_cache, WER_TRANSFORM
+from jiwer import wer
 
 
 AUDIO_PATH = "audio/clean-1.wav"
@@ -21,276 +12,6 @@ AUDIO_PATH = "audio/clean-1.wav"
 REFERENCE_TEXT = "Hello how are you how was your morning"
 
 LOOKAHEAD = [70, 6]
-
-
-NORMALIZE = Compose([
-    ToLowerCase(),
-    RemovePunctuation(),
-    RemoveMultipleSpaces(),
-    Strip(),
-])
-
-
-def get_streaming_sizes(encoder):
-    """Return the streaming geometry used by FastConformer."""
-
-    cfg = encoder.streaming_cfg
-
-    if isinstance(cfg.chunk_size, list):
-        chunk_size = cfg.chunk_size[-1]
-    else:
-        chunk_size = cfg.chunk_size
-
-    if isinstance(cfg.shift_size, list):
-        shift_size = cfg.shift_size[-1]
-    else:
-        shift_size = cfg.shift_size
-
-    pre_encode_cache = cfg.pre_encode_cache_size
-
-    if isinstance(pre_encode_cache, list):
-        pre_encode_cache = pre_encode_cache[-1]
-
-    return chunk_size, shift_size, pre_encode_cache
-
-
-def prepare_features(
-    features: torch.Tensor,
-    pre_encode_cache: int,
-) -> torch.Tensor:
-    """
-    FastConformer streaming requires pre-encoder history
-    at the beginning of each streaming window.
-    """
-
-    return torch.nn.functional.pad(
-        features,
-        (pre_encode_cache, 0),
-    )
-
-
-def run_cached(
-    model,
-    features,
-):
-    """
-    CacheSpeech.
-
-    Process each streaming chunk once and carry the
-    encoder state between chunks.
-    """
-
-    encoder = model.encoder
-    decoder = model.model.decoding
-    cfg = encoder.streaming_cfg
-
-    (
-        chunk_size,
-        shift_size,
-        pre_encode_cache,
-    ) = get_streaming_sizes(encoder)
-
-    features = prepare_features(
-        features,
-        pre_encode_cache,
-    )
-
-    window_size = chunk_size + pre_encode_cache
-
-    (
-        cache_last_channel,
-        cache_last_time,
-        cache_last_channel_len,
-    ) = encoder.get_initial_cache_state(
-        batch_size=1,
-        dtype=torch.float32,
-        device=model.device,
-    )
-
-    partial_hypotheses = None
-
-    total_encoded_frames = 0
-    total_input_frames = 0
-    num_chunks = 0
-
-    final_text = ""
-
-    start = 0
-
-    while start < features.shape[-1] - pre_encode_cache:
-
-        end = min(
-            start + window_size,
-            features.shape[-1],
-        )
-
-        chunk = features[:, :, start:end]
-
-        actual_length = chunk.shape[-1]
-
-        if actual_length < window_size:
-            chunk = torch.nn.functional.pad(
-                chunk,
-                (0, window_size - actual_length),
-            )
-
-        chunk_length = torch.tensor(
-            [chunk.shape[-1]],
-            device=model.device,
-            dtype=torch.long,
-        )
-
-        with torch.inference_mode():
-
-            (
-                encoded,
-                encoded_len,
-                cache_last_channel,
-                cache_last_time,
-                cache_last_channel_len,
-            ) = encoder.cache_aware_stream_step(
-                processed_signal=chunk,
-                processed_signal_length=chunk_length,
-                cache_last_channel=cache_last_channel,
-                cache_last_time=cache_last_time,
-                cache_last_channel_len=cache_last_channel_len,
-                keep_all_outputs=False,
-                drop_extra_pre_encoded=cfg.drop_extra_pre_encoded,
-            )
-
-            partial_hypotheses = (
-                decoder.rnnt_decoder_predictions_tensor(
-                    encoded,
-                    encoded_len,
-                    return_hypotheses=True,
-                    partial_hypotheses=partial_hypotheses,
-                )
-            )
-
-        total_input_frames += chunk.shape[-1]
-        total_encoded_frames += encoded_len.item()
-        num_chunks += 1
-
-        final_text = partial_hypotheses[0].text
-
-        start += shift_size
-
-    return {
-        "text": final_text,
-        "chunks": num_chunks,
-        "encoded_frames": total_encoded_frames,
-        "input_frames_processed": total_input_frames,
-    }
-
-
-def run_no_cache(
-    model,
-    features,
-):
-    """
-    Naive no-cache baseline.
-
-    At every streaming update, recompute the entire
-    observed prefix using the ordinary FastConformer
-    encoder with NO encoder cache.
-
-    Example:
-
-        step 1: encode [0 : t1]
-        step 2: encode [0 : t2]
-        step 3: encode [0 : t3]
-
-    Nothing from the previous encoder invocation
-    is reused.
-    """
-
-    encoder = model.encoder
-    decoder = model.model.decoding
-
-    (
-        chunk_size,
-        shift_size,
-        pre_encode_cache,
-    ) = get_streaming_sizes(encoder)
-
-    features = prepare_features(
-        features,
-        pre_encode_cache,
-    )
-
-    window_size = chunk_size + pre_encode_cache
-
-    total_encoded_frames = 0
-    total_input_frames = 0
-    num_chunks = 0
-
-    final_text = ""
-
-    start = 0
-
-    while start < features.shape[-1] - pre_encode_cache:
-
-        end = min(
-            start + window_size,
-            features.shape[-1],
-        )
-
-        # Recompute the entire observed prefix.
-        accumulated = features[:, :, :end]
-
-        actual_length = accumulated.shape[-1]
-
-        if actual_length < window_size:
-            accumulated = torch.nn.functional.pad(
-                accumulated,
-                (0, window_size - actual_length),
-            )
-
-        accumulated_length = torch.tensor(
-            [accumulated.shape[-1]],
-            device=model.device,
-            dtype=torch.long,
-        )
-
-        with torch.inference_mode():
-
-            # IMPORTANT:
-            #
-            # This is the ordinary encoder forward path.
-            #
-            # No cache_last_channel
-            # No cache_last_time
-            # No cache_last_channel_len
-            #
-            # Therefore the entire prefix is recomputed.
-            encoded, encoded_len = encoder(
-                audio_signal=accumulated,
-                length=accumulated_length,
-            )
-
-            hypotheses = (
-                decoder.rnnt_decoder_predictions_tensor(
-                    encoded,
-                    encoded_len,
-                    return_hypotheses=True,
-                    partial_hypotheses=None,
-                )
-            )
-
-        total_input_frames += accumulated.shape[-1]
-        total_encoded_frames += encoded_len.item()
-        num_chunks += 1
-
-        final_text = hypotheses[0].text
-
-        start += shift_size
-
-    return {
-        "text": final_text,
-        "chunks": num_chunks,
-        "encoded_frames": total_encoded_frames,
-        "input_frames_processed": total_input_frames,
-    }
 
 
 def benchmark_method(
@@ -321,8 +42,8 @@ def benchmark_method(
     result["rtf"] = elapsed / audio_duration
 
     result["wer"] = wer(
-        NORMALIZE(REFERENCE_TEXT),
-        NORMALIZE(result["text"]),
+        WER_TRANSFORM(REFERENCE_TEXT),
+        WER_TRANSFORM(result["final_text"]),
     )
 
     return result
@@ -339,7 +60,7 @@ def print_result(
 
     print(
         "Final:",
-        repr(result["text"]),
+        repr(result["final_text"]),
     )
 
     print(
@@ -426,7 +147,7 @@ def main():
     print("Warming up...")
 
     benchmark_method(
-        run_cached,
+        run_cache_aware,
         model,
         features,
         audio_duration,
@@ -446,7 +167,7 @@ def main():
     # ---------------------------------------------------------
 
     cached = benchmark_method(
-        run_cached,
+        run_cache_aware,
         model,
         features,
         audio_duration,

@@ -1,20 +1,18 @@
-import statistics
-import time
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import torch
-from jiwer import (
-    Compose,
-    RemoveMultipleSpaces,
-    RemovePunctuation,
-    Strip,
-    ToLowerCase,
-    wer,
-)
+from jiwer import wer
 
 from cachespeech.audio import extract_features, load_audio
 from cachespeech.model import CacheSpeechModel
+from cachespeech.evaluation import (
+    run_cache_aware,
+    warm_up,
+    stability_score,
+    mean,
+    std,
+    WER_TRANSFORM,
+)
 
 
 # ============================================================
@@ -69,14 +67,6 @@ DATASET = [
 ]
 
 
-WER_TRANSFORM = Compose([
-    ToLowerCase(),
-    RemovePunctuation(),
-    RemoveMultipleSpaces(),
-    Strip(),
-])
-
-
 # ============================================================
 # Utilities
 # ============================================================
@@ -120,228 +110,6 @@ def resolve_audio_path(item):
     return matches[0]
 
 
-def mean(values):
-    return statistics.mean(values)
-
-
-def std(values):
-    if len(values) <= 1:
-        return 0.0
-
-    return statistics.stdev(values)
-
-
-# ============================================================
-# Streaming inference
-# ============================================================
-
-def run_stream(model, features):
-    """
-    Run one complete cache-aware streaming inference pass.
-    """
-
-    encoder = model.encoder
-    decoder = model.model.decoding
-    cfg = encoder.streaming_cfg
-
-    (
-        cache_last_channel,
-        cache_last_time,
-        cache_last_channel_len,
-    ) = encoder.get_initial_cache_state(
-        batch_size=1,
-        dtype=torch.float32,
-        device=model.device,
-    )
-
-    partial_hypotheses = None
-    transcripts = []
-
-    total_inference_time = 0.0
-    total_encoded_frames = 0
-
-    # --------------------------------------------------------
-    # Streaming geometry
-    # --------------------------------------------------------
-
-    if isinstance(cfg.chunk_size, list):
-        input_chunk_size = cfg.chunk_size[-1]
-    else:
-        input_chunk_size = cfg.chunk_size
-
-    if isinstance(cfg.shift_size, list):
-        input_shift = cfg.shift_size[-1]
-    else:
-        input_shift = cfg.shift_size
-
-    pre_encode_cache = cfg.pre_encode_cache_size
-
-    if isinstance(pre_encode_cache, list):
-        pre_encode_cache = pre_encode_cache[-1]
-
-    window_size = (
-        input_chunk_size
-        + pre_encode_cache
-    )
-
-    # FastConformer requires pre-encoder history.
-    padded_features = torch.nn.functional.pad(
-        features,
-        (pre_encode_cache, 0),
-    )
-
-    # --------------------------------------------------------
-    # Streaming loop
-    # --------------------------------------------------------
-
-    start = 0
-
-    while (
-        start
-        < padded_features.shape[-1] - pre_encode_cache
-    ):
-
-        end = min(
-            start + window_size,
-            padded_features.shape[-1],
-        )
-
-        chunk = padded_features[:, :, start:end]
-
-        actual_length = chunk.shape[-1]
-
-        if actual_length == 0:
-            break
-
-        # Pad final chunk.
-        if actual_length < window_size:
-            chunk = torch.nn.functional.pad(
-                chunk,
-                (0, window_size - actual_length),
-            )
-
-        chunk_length = torch.tensor(
-            [chunk.shape[-1]],
-            device=model.device,
-            dtype=torch.long,
-        )
-
-        if model.device.startswith("cuda"):
-            torch.cuda.synchronize()
-
-        inference_start = time.perf_counter()
-
-        with torch.inference_mode():
-
-            (
-                encoded,
-                encoded_len,
-                cache_last_channel,
-                cache_last_time,
-                cache_last_channel_len,
-            ) = encoder.cache_aware_stream_step(
-                processed_signal=chunk,
-                processed_signal_length=chunk_length,
-                cache_last_channel=cache_last_channel,
-                cache_last_time=cache_last_time,
-                cache_last_channel_len=cache_last_channel_len,
-                keep_all_outputs=False,
-                drop_extra_pre_encoded=(
-                    cfg.drop_extra_pre_encoded
-                ),
-            )
-
-            partial_hypotheses = (
-                decoder.rnnt_decoder_predictions_tensor(
-                    encoded,
-                    encoded_len,
-                    return_hypotheses=True,
-                    partial_hypotheses=partial_hypotheses,
-                )
-            )
-
-        if model.device.startswith("cuda"):
-            torch.cuda.synchronize()
-
-        total_inference_time += (
-            time.perf_counter()
-            - inference_start
-        )
-
-        total_encoded_frames += (
-            encoded_len.item()
-        )
-
-        transcripts.append(
-            partial_hypotheses[0].text
-        )
-
-        start += input_shift
-
-    return {
-        "final_text": (
-            transcripts[-1]
-            if transcripts
-            else ""
-        ),
-        "transcripts": transcripts,
-        "inference_time": total_inference_time,
-        "encoded_frames": total_encoded_frames,
-        "num_chunks": len(transcripts),
-    }
-
-
-# ============================================================
-# Warm-up
-# ============================================================
-
-def warm_up(model, features, lookahead):
-    """
-    One unmeasured inference pass.
-
-    This prevents model/GPU initialization from contaminating
-    the measured inference times.
-    """
-
-    model.set_lookahead(lookahead)
-
-    run_stream(
-        model,
-        features,
-    )
-
-    if model.device.startswith("cuda"):
-        torch.cuda.synchronize()
-
-
-# ============================================================
-# Stability
-# ============================================================
-
-def stability_score(transcripts):
-    """
-    Fraction of consecutive transcript updates that remain
-    unchanged.
-
-    Higher = more stable partial transcript.
-    """
-
-    if len(transcripts) <= 1:
-        return 1.0
-
-    unchanged = sum(
-        a == b
-        for a, b in zip(
-            transcripts,
-            transcripts[1:],
-        )
-    )
-
-    return unchanged / (
-        len(transcripts) - 1
-    )
-
-
 # ============================================================
 # One measured evaluation
 # ============================================================
@@ -360,7 +128,7 @@ def evaluate_once(
 
     model.set_lookahead(lookahead)
 
-    result = run_stream(
+    result = run_cache_aware(
         model,
         features,
     )
@@ -801,7 +569,7 @@ def main():
                 <= candidate["wer_mean"]
             )
 
-            strictly_better = (
+            better = (
                 other["rtf_mean"]
                 < candidate["rtf_mean"]
                 or
@@ -812,112 +580,37 @@ def main():
                 < candidate["wer_mean"]
             )
 
-            if no_worse and strictly_better:
+            if no_worse and better:
                 dominated = True
                 break
 
         if not dominated:
-            pareto.append(
-                candidate
-            )
+            pareto.append(candidate)
 
     print()
+
+    print(
+        f"{'Lookahead':<15}"
+        f"{'WER':<18}"
+        f"{'RTF':<18}"
+        f"{'Stability':<20}"
+    )
+
+    print("-" * 75)
 
     for result in pareto:
 
         print(
-            f"Lookahead {result['lookahead']}: "
-            f"RTF={result['rtf_mean']:.4f}, "
-            f"stability={result['stability_mean']:.4f}, "
-            f"WER={result['wer_mean']:.4f}"
+            f"{str(result['lookahead']):<15}"
+            f"{result['wer_mean']:.4f}"
+            f" ± {result['wer_std']:.4f}"
+            f"    "
+            f"{result['rtf_mean']:.4f}"
+            f" ± {result['rtf_std']:.4f}"
+            f"    "
+            f"{result['stability_mean']:.4f}"
+            f" ± {result['stability_std']:.4f}"
         )
-
-    # ========================================================
-    # Plot
-    # ========================================================
-
-    plt.figure(
-        figsize=(9, 6)
-    )
-
-    x = [
-        r["rtf_mean"]
-        for r in cross_audio
-    ]
-
-    y = [
-        r["stability_mean"]
-        for r in cross_audio
-    ]
-
-    plt.scatter(
-        x,
-        y,
-    )
-
-    for result in cross_audio:
-
-        plt.annotate(
-            str(result["lookahead"]),
-            (
-                result["rtf_mean"],
-                result["stability_mean"],
-            ),
-            xytext=(6, 6),
-            textcoords="offset points",
-        )
-
-    pareto_sorted = sorted(
-        pareto,
-        key=lambda r: r["rtf_mean"],
-    )
-
-    if len(pareto_sorted) > 1:
-
-        plt.plot(
-            [
-                r["rtf_mean"]
-                for r in pareto_sorted
-            ],
-            [
-                r["stability_mean"]
-                for r in pareto_sorted
-            ],
-        )
-
-    plt.xlabel(
-        "Real-Time Factor (lower is better)"
-    )
-
-    plt.ylabel(
-        "Transcript Stability (higher is better)"
-    )
-
-    plt.title(
-        "CacheSpeech Lookahead Pareto Frontier"
-    )
-
-    plt.grid(
-        True,
-        alpha=0.3,
-    )
-
-    plt.tight_layout()
-
-    output_path = (
-        Path("experiments")
-        / "lookahead_pareto.png"
-    )
-
-    plt.savefig(
-        output_path,
-        dpi=200,
-    )
-
-    print()
-    print(
-        f"Pareto plot saved to: {output_path}"
-    )
 
 
 if __name__ == "__main__":
